@@ -1,7 +1,8 @@
 import os
-import psycopg2
+import mysql.connector
 from PIL import Image
 from PIL.ExifTags import TAGS
+import json
 
 def is_image(file_path):
     image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.gif']
@@ -44,12 +45,11 @@ def image_generator(directory):
                     yield metadata
 
 def create_database_connection():
-    conn = psycopg2.connect(
-        dbname="your_database_name",
-        user="your_username",
-        password="your_password",
-        host="your_host",
-        port="your_port"
+    conn = mysql.connector.connect(
+        host="rdbms.strato.de",
+        user="dbu5490866",
+        password="BigDataSchaden12",
+        database="dbs12933866"
     )
     return conn
 
@@ -57,15 +57,15 @@ def create_table(conn):
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS images (
-            id SERIAL PRIMARY KEY,
-            file_name TEXT,
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            file_name VARCHAR(255),
             file_path TEXT,
             size BIGINT,
-            format TEXT,
-            mode TEXT,
-            width INTEGER,
-            height INTEGER,
-            exif_data JSONB
+            format VARCHAR(50),
+            mode VARCHAR(50),
+            width INT,
+            height INT,
+            exif_data JSON
         )
     ''')
     conn.commit()
@@ -83,12 +83,12 @@ def insert_metadata(conn, metadata):
         metadata['mode'],
         metadata['width'],
         metadata['height'],
-        psycopg2.extras.Json(metadata)  # Storing all EXIF data as JSON
+        json.dumps(metadata)  # Storing all EXIF data as JSON
     ))
     conn.commit()
 
-# Beispielverwendung
-directory = 'J:\data\image_data'
+# Example usage
+directory = 'J:/data/image_data'
 
 conn = create_database_connection()
 create_table(conn)
