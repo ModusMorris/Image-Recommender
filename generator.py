@@ -4,6 +4,10 @@ from PIL import Image
 from PIL.ExifTags import TAGS
 import json
 from tqdm import tqdm
+import logging
+
+# Logging configuration
+logging.basicConfig(filename='image_processing.log', level=logging.INFO, format='%(asctime)s %(levelname)s:%(message)s')
 
 def is_image(file_path):
     image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.gif']
@@ -31,13 +35,19 @@ def extract_metadata(image_path):
             exif_data = image._getexif()
         
         if exif_data:
+            exif_metadata = {}
             for tag, value in exif_data.items():
                 tag_name = TAGS.get(tag, tag)
-                metadata[tag_name] = value
+                try:
+                    json.dumps(value)  # Test if the value is JSON serializable
+                    exif_metadata[tag_name] = value
+                except (TypeError, OverflowError):
+                    logging.warning(f"Non-serializable EXIF data ignored: {tag_name} = {value}")
+            metadata['exif_data'] = exif_metadata
         
         return metadata
     except Exception as e:
-        print(f"Error extracting metadata from {image_path}: {e}")
+        logging.error(f"Error extracting metadata from {image_path}: {e}")
         return None
 
 def image_generator(directory):
@@ -70,21 +80,23 @@ def create_table(conn):
     ''')
     conn.commit()
 
-def insert_metadata(conn, metadata):
+def insert_metadata_batch(conn, metadata_batch):
     cursor = conn.cursor()
-    cursor.execute('''
+    cursor.executemany('''
         INSERT INTO images (file_name, file_path, size, format, mode, width, height, exif_data)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (
-        metadata['file_name'],
-        metadata['file_path'],
-        metadata['size'],
-        metadata['format'],
-        metadata['mode'],
-        metadata['width'],
-        metadata['height'],
-        json.dumps(metadata)  # Storing all EXIF data as JSON
-    ))
+    ''', [
+        (
+            metadata['file_name'],
+            metadata['file_path'],
+            metadata['size'],
+            metadata['format'],
+            metadata['mode'],
+            metadata['width'],
+            metadata['height'],
+            json.dumps(metadata['exif_data']) if 'exif_data' in metadata else None
+        ) for metadata in metadata_batch
+    ])
     conn.commit()
 
 # Example usage
@@ -97,9 +109,19 @@ create_table(conn)
 # Count the total number of images
 total_images = sum([1 for root, dirs, files in os.walk(directory) for file in files if is_image(file)])
 
+batch_size = 1500
+metadata_batch = []
+
 with tqdm(total=total_images, desc="Processing Images") as pbar:
     for image_metadata in image_generator(directory):
-        insert_metadata(conn, image_metadata)
+        metadata_batch.append(image_metadata)
         pbar.update(1)
+        if len(metadata_batch) >= batch_size:
+            insert_metadata_batch(conn, metadata_batch)
+            metadata_batch = []
+
+    # Insert any remaining metadata
+    if metadata_batch:
+        insert_metadata_batch(conn, metadata_batch)
 
 conn.close()
