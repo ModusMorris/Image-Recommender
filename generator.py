@@ -1,7 +1,13 @@
 import os
-import psycopg2
+import sqlite3
 from PIL import Image
 from PIL.ExifTags import TAGS
+import json
+from tqdm import tqdm
+import logging
+
+# Logging configuration
+logging.basicConfig(filename='image_processing.log', level=logging.INFO, format='%(asctime)s %(levelname)s:%(message)s')
 
 def is_image(file_path):
     image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.gif']
@@ -12,7 +18,6 @@ def extract_metadata(image_path):
         image = Image.open(image_path)
         image.verify()  # Verify that it is, in fact, an image
         image = Image.open(image_path)  # Re-open image for metadata extraction
-        exif_data = image._getexif()
         
         metadata = {
             'file_name': os.path.basename(image_path),
@@ -24,14 +29,25 @@ def extract_metadata(image_path):
             'height': image.height,
         }
         
+        # Only extract EXIF data if the image format supports it
+        exif_data = None
+        if image.format in ['JPEG', 'TIFF']:
+            exif_data = image._getexif()
+        
         if exif_data:
+            exif_metadata = {}
             for tag, value in exif_data.items():
                 tag_name = TAGS.get(tag, tag)
-                metadata[tag_name] = value
+                try:
+                    json.dumps(value)  # Test if the value is JSON serializable
+                    exif_metadata[tag_name] = value
+                except (TypeError, OverflowError):
+                    logging.warning(f"Non-serializable EXIF data ignored: {tag_name} = {value}")
+            metadata['exif_data'] = exif_metadata
         
         return metadata
     except Exception as e:
-        print(f"Error extracting metadata from {image_path}: {e}")
+        logging.error(f"Error extracting metadata from {image_path}: {e}")
         return None
 
 def image_generator(directory):
@@ -43,55 +59,69 @@ def image_generator(directory):
                 if metadata:
                     yield metadata
 
-def create_database_connection():
-    conn = psycopg2.connect(
-        dbname="your_database_name",
-        user="your_username",
-        password="your_password",
-        host="your_host",
-        port="your_port"
-    )
+def create_database_connection(db_file):
+    conn = sqlite3.connect(db_file)
     return conn
 
 def create_table(conn):
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS images (
-            id SERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             file_name TEXT,
             file_path TEXT,
-            size BIGINT,
+            size INTEGER,
             format TEXT,
             mode TEXT,
             width INTEGER,
             height INTEGER,
-            exif_data JSONB
+            exif_data TEXT
         )
     ''')
     conn.commit()
 
-def insert_metadata(conn, metadata):
+def insert_metadata_batch(conn, metadata_batch):
     cursor = conn.cursor()
-    cursor.execute('''
+    cursor.executemany('''
         INSERT INTO images (file_name, file_path, size, format, mode, width, height, exif_data)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-    ''', (
-        metadata['file_name'],
-        metadata['file_path'],
-        metadata['size'],
-        metadata['format'],
-        metadata['mode'],
-        metadata['width'],
-        metadata['height'],
-        psycopg2.extras.Json(metadata)  # Storing all EXIF data as JSON
-    ))
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', [
+        (
+            metadata['file_name'],
+            metadata['file_path'],
+            metadata['size'],
+            metadata['format'],
+            metadata['mode'],
+            metadata['width'],
+            metadata['height'],
+            json.dumps(metadata['exif_data']) if 'exif_data' in metadata else None
+        ) for metadata in metadata_batch
+    ])
     conn.commit()
 
-# Beispielverwendung
-directory = 'J:\data\image_data'
+# Example usage
+directory = 'J:/data/image_data'
+db_file = 'images.db'
 
-conn = create_database_connection()
+conn = create_database_connection(db_file)
 create_table(conn)
-for image_metadata in image_generator(directory):
-    insert_metadata(conn, image_metadata)
+
+# Count the total number of images
+total_images = sum([1 for root, dirs, files in os.walk(directory) for file in files if is_image(file)])
+
+batch_size = 1500
+metadata_batch = []
+
+with tqdm(total=total_images, desc="Processing Images") as pbar:
+    for image_metadata in image_generator(directory):
+        metadata_batch.append(image_metadata)
+        pbar.update(1)
+        if len(metadata_batch) >= batch_size:
+            insert_metadata_batch(conn, metadata_batch)
+            metadata_batch = []
+
+    # Insert any remaining metadata
+    if metadata_batch:
+        insert_metadata_batch(conn, metadata_batch)
+
 conn.close()
