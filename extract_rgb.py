@@ -88,6 +88,17 @@ def save_histograms_to_pickle(image_paths, pickle_file, progress_file, batch_ind
         pickle.dump(histogram_dict, f)
     print(f"Histogramme wurden in {pickle_file} gespeichert.")
 
+def extract_rgb_profile(image_path):
+    with Image.open(image_path) as img:
+        img = img.convert('RGB')
+        img = img.resize((100, 100))  # Resize for simplification if needed
+        rgb_profile = np.mean(np.array(img), axis=(0, 1))
+        return rgb_profile.tolist()
+
+# Example usage
+rgb_profile = extract_rgb_profile('D:/Image-Recommender/archive/Vegetable Images/test/Bean/0001.jpg')
+print('RGB Profile:', rgb_profile)
+
 # Hauptfunktion
 def main():
     image_paths = get_image_paths()
