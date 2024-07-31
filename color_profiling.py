@@ -6,6 +6,7 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import time
+from multiprocessing import Pool, cpu_count
 
 # Funktion zur Extraktion des RGB-Histogramms eines Bildes
 def extract_histogram(image_path):
@@ -16,11 +17,11 @@ def extract_histogram(image_path):
         histogram = np.array(histogram) / (224 * 224)  # Normalisieren
         return histogram
 
-
-# Funktion zur Berechnung der Ähnlichkeit zwischen zwei Histogrammen
-def color_similarity(hist1, hist2):
-    return np.correlate(hist1, hist2)[0]
-
+# Funktion zur Berechnung der Chi-Quadrat-Distanz zwischen zwei Histogrammen
+def chi2_distance(args):
+    histA, histB = args
+    eps = 1e-10
+    return 0.5 * np.sum(((histA - histB) ** 2) / (histA + histB + eps))
 
 # Funktion zum Laden der Histogramme aus einer Pickle-Datei
 def load_histograms(pickle_file):
@@ -28,15 +29,16 @@ def load_histograms(pickle_file):
         histograms = pickle.load(f)
     return histograms
 
-
-# Funktion zum Finden der 5 ähnlichsten Bilder für ein Eingabebild (verwendet IDs)
+# Funktion zum Finden der 5 ähnlichsten Bilder für ein Eingabebild
 def find_similar_images_for_one_input(input_histogram, histograms, top_n=5):
-    similarities = {}
-    for image_id, hist in tqdm(histograms.items(), desc="Calculating similarities"):
-        similarities[image_id] = color_similarity(input_histogram, hist)
-    sorted_images = sorted(similarities.items(), key=lambda item: item[1], reverse=True)
+    pool = Pool(cpu_count())
+    hist_list = [(input_histogram, hist) for hist in histograms.values()]
+    similarities = pool.map(chi2_distance, hist_list)
+    pool.close()
+    pool.join()
+    image_paths = list(histograms.keys())
+    sorted_images = sorted(zip(image_paths, similarities), key=lambda item: item[1])
     return [img[0] for img in sorted_images[:top_n]]
-
 
 # Funktion zur Anzeige der Bilder
 def display_images(image_groups):
@@ -52,7 +54,6 @@ def display_images(image_groups):
                     print(f"Error loading image {image_path}: {e}")
     plt.show()
 
-
 # Funktion zum Abrufen der Bildpfade aus der Datenbank basierend auf der ID
 def get_image_path_from_db(image_id, conn):
     cursor = conn.cursor()
@@ -61,7 +62,6 @@ def get_image_path_from_db(image_id, conn):
     if result:
         return result[0]
     return None
-
 
 # Hauptfunktion
 def main():
@@ -110,6 +110,11 @@ def main():
                 similar_image_paths.append(similar_image_path)
             else:
                 print(f"Image path not found in database for ID {img_id}")
+
+        # Ausgabe der Dateipfade der ähnlichen Bilder
+        print(f"Similar images for {input_image_path}:")
+        for path in similar_image_paths:
+            print(path)
 
         all_similar_image_groups.append(similar_image_paths)
 
