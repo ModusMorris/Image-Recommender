@@ -6,6 +6,8 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import time
+import cv2  # OpenCV
+from multiprocessing import Pool, cpu_count
 
 # Funktion zur Extraktion des RGB-Histogramms eines Bildes
 def extract_histogram(image_path):
@@ -17,9 +19,11 @@ def extract_histogram(image_path):
         return histogram
 
 
-# Funktion zur Berechnung der Ähnlichkeit zwischen zwei Histogrammen
-def color_similarity(hist1, hist2):
-    return np.correlate(hist1, hist2)[0]
+# Funktion zur Berechnung der Chi-Quadrat-Distanz zwischen zwei Histogrammen
+def chi2_distance(args):
+    histA, histB = args
+    eps = 1e-10
+    return 0.5 * np.sum(((histA - histB) ** 2) / (histA + histB + eps))
 
 
 # Funktion zum Laden der Histogramme aus einer Pickle-Datei
@@ -29,12 +33,15 @@ def load_histograms(pickle_file):
     return histograms
 
 
-# Funktion zum Finden der 5 ähnlichsten Bilder für ein Eingabebild (verwendet IDs)
+# Funktion zum Finden der 5 ähnlichsten Bilder für ein Eingabebild
 def find_similar_images_for_one_input(input_histogram, histograms, top_n=5):
-    similarities = {}
-    for image_id, hist in tqdm(histograms.items(), desc="Calculating similarities"):
-        similarities[image_id] = color_similarity(input_histogram, hist)
-    sorted_images = sorted(similarities.items(), key=lambda item: item[1], reverse=True)
+    pool = Pool(cpu_count())
+    hist_list = [(input_histogram, hist) for hist in histograms.values()]
+    similarities = pool.map(chi2_distance, hist_list)
+    pool.close()
+    pool.join()
+    image_paths = list(histograms.keys())
+    sorted_images = sorted(zip(image_paths, similarities), key=lambda item: item[1])
     return [img[0] for img in sorted_images[:top_n]]
 
 
