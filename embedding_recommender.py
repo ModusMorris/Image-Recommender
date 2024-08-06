@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 # Load the embeddings with unique IDs and image paths
 start_time = time.time()
-with open('embeddings/embeddings_with_ids.pkl', 'rb') as f:
+with open('pkl_files/embeddings_with_ids.pkl', 'rb') as f:
     embeddings_with_ids = pickle.load(f)
 load_time = time.time() - start_time
 print(f"Time to load embeddings: {load_time:.2f} seconds")
@@ -53,7 +53,7 @@ def calculate_similarities(input_embedding, embeddings):
 print("Similarity functions defined.")
 
 # Load the input image
-input_image_path = 'input_images/new_try3.jpg'  # Adjust the path as needed
+input_image_path = 'input_images/try.jpg'  # Adjust the path as needed
 print(f"Input image path: {input_image_path}")
 
 input_embedding = get_image_embedding(input_image_path)
