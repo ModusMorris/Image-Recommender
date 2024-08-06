@@ -8,3 +8,7 @@
 *.log 
 *.db
 /embeddings/
+*.log 
+*.db
+main
+recommender
