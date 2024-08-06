@@ -7,6 +7,8 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import time
 from multiprocessing import Pool, cpu_count
+from sklearn.decomposition import PCA
+from sklearn.metrics.pairwise import cosine_similarity
 
 def extract_histogram(image_path):
     with Image.open(image_path) as img:
@@ -16,30 +18,27 @@ def extract_histogram(image_path):
         histogram /= histogram.sum()
         return histogram.flatten()
 
-def chi2_distance(histA, histB, eps=1e-10):
-    return 0.5 * np.sum(((histA - histB) ** 2) / (histA + histB + eps))
-
 def load_histograms(pickle_file):
     with open(pickle_file, "rb") as f:
         histograms = pickle.load(f)
     return histograms
 
-def find_similar_images_for_one_input(input_histogram, histograms, top_n=5):
-    hist_list = np.array(list(histograms.values()))
-    distances = np.array([chi2_distance(input_histogram, hist) for hist in hist_list])
-    sorted_indices = np.argsort(distances)[:top_n]
-    return [list(histograms.keys())[i] for i in sorted_indices]
-
-def find_aggregated_similar_images(input_histograms, histograms, top_n=5):
-    aggregated_distances = np.zeros(len(histograms))
-    hist_list = np.array(list(histograms.values()))
+def pca_cosine_similarity(input_histogram, histograms, pca, n_components_pca=50, top_n=5):
+    hist_values = np.array(list(histograms.values()))
     
-    for input_hist in input_histograms:
-        distances = np.array([chi2_distance(input_hist, hist) for hist in hist_list])
-        aggregated_distances += distances
-
-    sorted_indices = np.argsort(aggregated_distances)[:top_n]
-    return [list(histograms.keys())[i] for i in sorted_indices]
+    # PCA transform the histograms
+    pca_histograms = pca.transform(hist_values)
+    
+    # PCA transform the input histogram
+    pca_input_histogram = pca.transform([input_histogram])
+    
+    # Calculate cosine similarities
+    similarities = cosine_similarity(pca_input_histogram, pca_histograms)[0]
+    
+    # Get top N similar images
+    top_indices = np.argsort(similarities)[-top_n:][::-1]
+    
+    return [list(histograms.keys())[i] for i in top_indices]
 
 def display_images(image_groups):
     fig, axes = plt.subplots(len(image_groups), 6, figsize=(18, len(image_groups) * 5))
@@ -80,12 +79,20 @@ def main():
 
     all_similar_image_groups = []
 
+    print("Extracting histograms...")
     with Pool(cpu_count()) as pool:
-        input_histograms = pool.map(extract_histogram, input_image_paths)
+        input_histograms = list(tqdm(pool.imap(extract_histogram, input_image_paths), total=len(input_image_paths), desc="Extracting histograms"))
 
-    # Find individually similar images
+    # Fit PCA on the dataset histograms
+    print("Running PCA...")
+    hist_values = np.array(list(histograms.values()))
+    pca = PCA(n_components=50)
+    pca.fit(hist_values)
+    print("PCA completed.")
+
+    # Find similar images for each input image
     for input_image_path, input_histogram in zip(input_image_paths, input_histograms):
-        similar_images = find_similar_images_for_one_input(input_histogram, histograms)
+        similar_images = pca_cosine_similarity(input_histogram, histograms, pca)
         print(f"Similar images for {input_image_path}: {similar_images}")
 
         similar_image_paths = [input_image_path]
@@ -96,26 +103,15 @@ def main():
             else:
                 print(f"Image path not found in database for ID {img_id}")
 
-        print(f"Similar images for {input_image_path}:")
-        for path in similar_image_paths:
-            print(path)
-
         all_similar_image_groups.append(similar_image_paths)
 
-    # Find aggregated similar images
-    aggregated_similar_images = find_aggregated_similar_images(input_histograms, histograms)
-    aggregated_similar_image_paths = []
-    for img_id in aggregated_similar_images:
-        similar_image_path = get_image_path_from_db(img_id, conn)
-        if similar_image_path is not None:
-            aggregated_similar_image_paths.append(similar_image_path)
-        else:
-            print(f"Image path not found in database for ID {img_id}")
-
-    all_similar_image_groups.append(aggregated_similar_image_paths)
-
     conn.close()
-    display_images(all_similar_image_groups)
+
+    if all_similar_image_groups:
+        print("Displaying images...")
+        display_images(all_similar_image_groups)
+    else:
+        print("No similar images found.")
 
     end_time = time.time()
     duration = end_time - start_time
