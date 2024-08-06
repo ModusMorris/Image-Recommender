@@ -6,12 +6,14 @@ import numpy as np
 from tqdm import tqdm
 
 # Verbindungsaufbau zur SQLite-Datenbank
+
 conn = sqlite3.connect("images.db")
 cursor = conn.cursor()
 
 # Funktion zur Extraktion des RGB-Histogramms eines Bildes
 def extract_histogram(image_path):
     with Image.open(image_path) as img:
+
         img = img.convert("RGB")
         img = img.resize((224, 224))  # Größe anpassen, falls gewünscht
         histogram = img.histogram()
@@ -20,14 +22,17 @@ def extract_histogram(image_path):
         return histogram
 
 
+
 # Funktion zum Abrufen der Bildpfade aus der Datenbank
 def get_image_paths():
     cursor.execute(
         "SELECT file_path FROM images"
     )  # Passen Sie die Abfrage entsprechend Ihrer Tabellenstruktur an
+
     rows = cursor.fetchall()
     image_paths = [row[0] for row in rows]
     return image_paths
+
 
 
 # Laden des bisherigen Fortschritts
@@ -69,9 +74,11 @@ def save_histograms_to_pickle(
     start_index = start_batch * batch_size
 
     with tqdm(total=len(image_paths), desc="Processing images", unit="image") as pbar:
+
         pbar.update(
             len(completed_paths)
         )  # Fortschritt basierend auf bereits verarbeiteten Bildern
+
 
         batch = []
         for idx, image_path in enumerate(image_paths):
@@ -80,11 +87,13 @@ def save_histograms_to_pickle(
             if image_path not in completed_paths:
                 try:
                     histogram = extract_histogram(image_path)
+
                     histogram_dict[
                         image_path
                     ] = (
                         histogram.tolist()
                     )  # Konvertieren des numpy-Arrays in eine Liste für die Pickle-Speicherung
+
                     completed_paths.add(image_path)
                     batch.append(image_path)
                     if len(batch) >= batch_size:
@@ -100,6 +109,7 @@ def save_histograms_to_pickle(
             pbar.update(len(batch))
             save_batch_index(batch_index_file, len(image_paths) // batch_size)
 
+
     with open(pickle_file, "wb") as f:
         pickle.dump(histogram_dict, f)
     print(f"Histogramme wurden in {pickle_file} gespeichert.")
@@ -108,6 +118,7 @@ def save_histograms_to_pickle(
 # Hauptfunktion
 def main():
     image_paths = get_image_paths()
+
     pickle_file = "histograms.pkl"
     progress_file = "progress.pkl"
     batch_index_file = "batch_index.txt"
