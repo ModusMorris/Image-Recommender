@@ -23,7 +23,7 @@ def load_histograms(pickle_file):
         histograms = pickle.load(f)
     return histograms
 
-def pca_cosine_similarity(input_histogram, histograms, pca, n_components_pca=50, top_n=5):
+def pca_cosine_similarity(input_histogram, histograms, pca, top_n=5):
     hist_values = np.array(list(histograms.values()))
     
     # PCA transform the histograms
@@ -86,7 +86,7 @@ def main():
     # Fit PCA on the dataset histograms
     print("Running PCA...")
     hist_values = np.array(list(histograms.values()))
-    pca = PCA(n_components=50)
+    pca = PCA(n_components=170)
     pca.fit(hist_values)
     print("PCA completed.")
 
