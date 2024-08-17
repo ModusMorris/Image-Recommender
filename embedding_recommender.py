@@ -54,6 +54,11 @@ def calculate_similarities(input_embedding, embeddings):
 example_folder = 'examples'
 example_images = [os.path.join(example_folder, f) for f in os.listdir(example_folder) if f.endswith(('png', 'jpg', 'jpeg'))]
 
+
+# Load the input image
+input_image_path = 'input_images/bird.jpg'  # Adjust the path as needed
+print(f"Input image path: {input_image_path}")
+
 num_images = len(example_images)
 fig, axes = plt.subplots(num_images + 1, 6, figsize=(20, 4 * (num_images + 1)))  # Create a grid with num_images + 1 rows and 6 columns
 
