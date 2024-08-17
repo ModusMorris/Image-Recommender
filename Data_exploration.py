@@ -4,7 +4,7 @@ from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 
 # Step 1: Load the embeddings from the pkl file
-with open('embeddings/embeddings.pkl', 'rb') as f:
+with open('pkl_files/embeddings.pkl', 'rb') as f:
     embeddings = pickle.load(f)
 
 print(f"Loaded {len(embeddings)} embeddings.")

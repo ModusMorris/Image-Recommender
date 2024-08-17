@@ -3,7 +3,6 @@
 /archive/
 /input_images/
 /image_processing.log
-/images.db
 /archive/
 *.log 
 *.db
@@ -13,3 +12,6 @@
 main
 recommender
 /logs/
+/pkl_files/
+/examples/
+/tutorial_logs/
