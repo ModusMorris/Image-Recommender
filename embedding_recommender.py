@@ -1,6 +1,6 @@
+import os
 import pickle
 import numpy as np
-import os
 import time
 from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
 from scipy.spatial.distance import cityblock  # For Manhattan distance
@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 # Load the embeddings with unique IDs and image paths
 start_time = time.time()
-with open('pkl_files/embeddings_with_ids.pkl', 'rb') as f:
+with open('corrected_embeddings_with_ids.pkl', 'rb') as f:
     embeddings_with_ids = pickle.load(f)
 load_time = time.time() - start_time
 print(f"Time to load embeddings: {load_time:.2f} seconds")
@@ -30,7 +30,7 @@ preprocess = transforms.Compose([
 ])
 
 def get_image_embedding(image_path):
-    model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1) 
+    model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
     model = torch.nn.Sequential(*list(model.children())[:-1])  # Remove the classification layer
     model.eval()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -50,61 +50,104 @@ def calculate_similarities(input_embedding, embeddings):
     manhattan_sim = -np.array([cityblock(input_embedding, emb) for emb in embeddings])  # Negate to make it a similarity
     return cosine_sim, euclidean_sim, manhattan_sim
 
-print("Similarity functions defined.")
+# Process all images in the /examples folder
+example_folder = 'examples'
+example_images = [os.path.join(example_folder, f) for f in os.listdir(example_folder) if f.endswith(('png', 'jpg', 'jpeg'))]
+
 
 # Load the input image
 input_image_path = 'input_images/bird.jpg'  # Adjust the path as needed
 print(f"Input image path: {input_image_path}")
 
-input_embedding = get_image_embedding(input_image_path)
-print("Input image embedding calculated.")
+num_images = len(example_images)
+fig, axes = plt.subplots(num_images + 1, 6, figsize=(20, 4 * (num_images + 1)))  # Create a grid with num_images + 1 rows and 6 columns
 
-# Calculate similarities
-cosine_sim, euclidean_sim, manhattan_sim = calculate_similarities(input_embedding, embeddings)
-print("Similarities calculated.")
+# Store all cosine similarities
+all_cosine_similarities = []
 
-# Get top 5 indices for each similarity measure
-top_indices_cosine = cosine_sim.argsort()[-5:][::-1]
-top_indices_euclidean = euclidean_sim.argsort()[-5:][::-1]
-top_indices_manhattan = manhattan_sim.argsort()[-5:][::-1]
+embedding_start_time = time.time()
 
-print("Top indices for each similarity measure found.")
+for i, input_image_path in enumerate(example_images):
+    # Get the embedding of the input image
+    input_embedding_start = time.time()
+    input_embedding = get_image_embedding(input_image_path)
+    input_embedding_end = time.time()
+    print(f"Time to compute embedding for {input_image_path}: {input_embedding_end - input_embedding_start:.2f} seconds")
+    print(f"Input image embedding calculated for {input_image_path}")
 
-# Combine top indices (ensuring uniqueness) and sort by cosine similarity for display
-top_indices = np.unique(np.concatenate((top_indices_cosine, top_indices_euclidean, top_indices_manhattan)))
-top_indices = top_indices[np.argsort(cosine_sim[top_indices])[::-1]]
+    # Calculate similarities
+    similarities_start = time.time()
+    cosine_sim, euclidean_sim, manhattan_sim = calculate_similarities(input_embedding, embeddings)
+    similarities_end = time.time()
+    print(f"Time to calculate similarities for {input_image_path}: {similarities_end - similarities_start:.2f} seconds")
+    print("Similarities calculated.")
 
-top_images = [image_paths[idx] for idx in top_indices[:5]]
-top_similarities = cosine_sim[top_indices[:5]]
+    # Get top 5 indices for each similarity measure
+    top_indices_cosine = cosine_sim.argsort()[-5:][::-1]
+    top_indices_euclidean = euclidean_sim.argsort()[-5:][::-1]
+    top_indices_manhattan = manhattan_sim.argsort()[-5:][::-1]
 
-print("Top images and similarities selected.")
+    print("Top indices for each similarity measure found.")
 
-def plot_images(input_image_path, top_images, similarity_percentages):
-    fig, axes = plt.subplots(2, 5, figsize=(17, 9))  # Create a 2x5 grid
-    
-    # Plot the input image
+    # Combine top indices (ensuring uniqueness) and sort by cosine similarity for display
+    top_indices = np.unique(np.concatenate((top_indices_cosine, top_indices_euclidean, top_indices_manhattan)))
+    top_indices = top_indices[np.argsort(cosine_sim[top_indices])[::-1]]
+
+    top_images = [image_paths[idx] for idx in top_indices[:5]]
+    top_similarities = cosine_sim[top_indices[:5]]
+
+    print(f"Top images and similarities selected for {input_image_path}")
+
+    # Plot the input image in the first column of the current row
     input_img = Image.open(input_image_path)
-    axes[0, 0].imshow(input_img)
-    axes[0, 0].set_title("Input Image")
-    axes[0, 0].axis('off')
+    axes[i, 0].imshow(input_img)
+    axes[i, 0].set_title("Input Image")
+    axes[i, 0].axis('off')
     
-    # Leave the remaining columns of the first row empty
-    for j in range(1, 5):
-        axes[0, j].axis('off')
-    
-    # Plot the top 5 similar images in the second row
-    for i, (image_path, similarity) in enumerate(zip(top_images, similarity_percentages)):
+    # Plot the top 5 similar images in the remaining columns of the current row
+    for j, (image_path, similarity) in enumerate(zip(top_images, top_similarities)):
         if os.path.exists(image_path):
             img = Image.open(image_path)
-            axes[1, i].imshow(img)
-            axes[1, i].set_title(f"Similarity: {similarity * 100:.2f}%\n{os.path.basename(image_path)}")
-            axes[1, i].axis('off')
+            axes[i, j + 1].imshow(img)
+            axes[i, j + 1].set_title(f"Similarity: {similarity * 100:.2f}%\n{os.path.basename(image_path)}")
+            axes[i, j + 1].axis('off')
         else:
-            axes[1, i].set_title("Image not found")
-            axes[1, i].axis('off')
-    
-    plt.tight_layout()
-    plt.show()
+            axes[i, j + 1].set_title("Image not found")
+            axes[i, j + 1].axis('off')
 
-plot_images(input_image_path, top_images, top_similarities)
-print("Images plotted.")
+    # Append the cosine similarities
+    all_cosine_similarities.append(cosine_sim)
+
+embedding_end_time = time.time()
+print(f"Time to process all embeddings: {embedding_end_time - embedding_start_time:.2f} seconds")
+
+# Calculate the mean cosine similarity across all input images
+mean_cosine_similarities = np.mean(all_cosine_similarities, axis=0)
+top_indices_combined = mean_cosine_similarities.argsort()[-5:][::-1]
+
+top_images_combined = [image_paths[idx] for idx in top_indices_combined]
+top_similarities_combined = mean_cosine_similarities[top_indices_combined]
+
+# Plot the overall top 5 similar images in the last row
+axes[-1, 0].set_title("Top 5 Similar Images Overall")
+axes[-1, 0].axis('off')
+
+for j, (image_path, similarity) in enumerate(zip(top_images_combined, top_similarities_combined)):
+    if os.path.exists(image_path):
+        img = Image.open(image_path)
+        axes[-1, j + 1].imshow(img)
+        axes[-1, j + 1].set_title(f"Similarity: {similarity * 100:.2f}%\n{os.path.basename(image_path)}")
+        axes[-1, j + 1].axis('off')
+    else:
+        axes[-1, j + 1].set_title("Image not found")
+        axes[-1, j + 1].axis('off')
+
+plot_start = time.time()
+plt.tight_layout()
+plt.show()
+plot_end = time.time()
+print(f"Time to display images: {plot_end - plot_start:.2f} seconds")
+
+end_time = time.time()
+duration = end_time - start_time
+print(f"The computation and display of images took {duration:.2f} seconds.")

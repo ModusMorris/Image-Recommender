@@ -15,3 +15,4 @@ recommender
 /pkl_files/
 /examples/
 /tutorial_logs/
+*__pycache__
