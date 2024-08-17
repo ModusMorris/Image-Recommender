@@ -12,17 +12,29 @@ In the **'embedding_recommender.py'** file, a pre-trained **ResNet50 model** is 
 **Cosine Similarity:** Measures the angle between vectors, indicating how similar the direction of the vectors is.
 **Euclidean Distance:** Computes the straight-line distance between two points (embeddings) in the feature space.
 **Manhattan Distance (Cityblock Distance):** Measures the distance along the axes of the space, which can be more robust to outliers in individual dimensions.
+
+**example for the output how the similarities could look like:**
+![embeddings_similarity](https://github.com/user-attachments/assets/8e3a492f-7a53-433c-bf60-36b25e01f234)
+
 ### 2. Color Analysis and Profiling
 The **'color_profiling.py'** file focuses on analyzing the **color profiles** of images to find visually similar images based on their color compositions.
 
 **RGB Histogram Creation:** For each image, an RGB histogram is created, representing the frequency of different color values (Red, Green, Blue) in the image. These histograms are normalized to ensure comparability across images of different sizes.
 **Chi-Square Distance:** This method is used to measure the similarity between two color profiles. It calculates the squared difference between the histograms, which provides a measure of the discrepancy between the color distributions of two images.
 **Parallel Processing:** To increase efficiency, histogram computation for large image datasets is parallelized by utilizing multiple CPU cores.
+
+**example for the output how the similarities could look like:**
+![cololr_profiling](https://github.com/user-attachments/assets/83be116a-e08c-4387-922e-71f8c22c0367)
+
 ### 3. Dimensionality Reduction and Similarity Calculation
 The **'dimension_reduction_similarity.py'** file implements a technique for dimensionality reduction of image data using **Principal Component Analysis (PCA)** and then uses these reduced representations to calculate image similarities.
 
 **PCA (Principal Component Analysis):** PCA is a statistical method used to reduce the dimensionality of data while retaining as much variance (information) as possible. In this context, PCA is used to reduce the size of the color histograms, which improves the efficiency of similarity calculations.
 **Cosine Similarity:** After dimensionality reduction, cosine similarity is used to determine the closeness of the reduced vectors (histograms). This method is particularly suitable for measuring similarity in high-dimensional spaces.
+
+**example for the output how the similarities could look like:**
+![Similarity_PCA_RGB_Histograms](https://github.com/user-attachments/assets/6dfb7b73-75a1-4e38-84fb-61bb3898fc09)
+
 ### 4. Visualization of Results
 Both modules (**'color_profiling.py'** and **'dimension_reduction_similarity.py'**) include functions to visualize the results. Found similar images can be displayed in a grid format, allowing for an intuitive visual assessment of similarity.
 
