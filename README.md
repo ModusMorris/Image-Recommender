@@ -33,7 +33,7 @@ Both modules (**'color_profiling.py'** and **'dimension_reduction_similarity.py'
 
 ## Installation
 1. Clone the repository:
-`git clone https://github.com/YourUsername/YourRepository.git`
+`git clone https://github.com/ModusMorris/Image-Recommender.git`
 2. Install the required Python packages:
 `pip install -r requirements.txt`
 
