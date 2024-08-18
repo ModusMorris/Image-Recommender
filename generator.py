@@ -117,16 +117,19 @@ def insert_metadata_batch(conn, metadata_batch):
     )
     conn.commit()
 
+
 def load_image(image_path):
     return Image.open(image_path)
+
 
 def load_images_from_directory(directory_path):
     images = {}
     for filename in os.listdir(directory_path):
-        if filename.endswith(('.png', '.jpg', '.jpeg')):
+        if filename.endswith((".png", ".jpg", ".jpeg")):
             image_path = os.path.join(directory_path, filename)
             images[filename] = load_image(image_path)
     return images
+
 
 # Example usage
 directory = "D:/Image-Recommender/archive"
@@ -154,7 +157,6 @@ with tqdm(total=total_images, desc="Processing Images") as pbar:
     # Insert any remaining metadata
     if metadata_batch:
         insert_metadata_batch(conn, metadata_batch)
-
 
 
 conn.close()

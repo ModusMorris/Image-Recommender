@@ -10,6 +10,7 @@ from tqdm import tqdm
 conn = sqlite3.connect("images.db")
 cursor = conn.cursor()
 
+
 # Funktion zur Extraktion des RGB-Histogramms eines Bildes
 def extract_histogram(image_path):
     with Image.open(image_path) as img:
@@ -22,7 +23,6 @@ def extract_histogram(image_path):
         return histogram
 
 
-
 # Funktion zum Abrufen der Bildpfade aus der Datenbank
 def get_image_paths():
     cursor.execute(
@@ -32,7 +32,6 @@ def get_image_paths():
     rows = cursor.fetchall()
     image_paths = [row[0] for row in rows]
     return image_paths
-
 
 
 # Laden des bisherigen Fortschritts
@@ -79,7 +78,6 @@ def save_histograms_to_pickle(
             len(completed_paths)
         )  # Fortschritt basierend auf bereits verarbeiteten Bildern
 
-
         batch = []
         for idx, image_path in enumerate(image_paths):
             if idx < start_index:
@@ -88,9 +86,7 @@ def save_histograms_to_pickle(
                 try:
                     histogram = extract_histogram(image_path)
 
-                    histogram_dict[
-                        image_path
-                    ] = (
+                    histogram_dict[image_path] = (
                         histogram.tolist()
                     )  # Konvertieren des numpy-Arrays in eine Liste für die Pickle-Speicherung
 
@@ -108,7 +104,6 @@ def save_histograms_to_pickle(
             save_progress(histogram_dict, progress_file)
             pbar.update(len(batch))
             save_batch_index(batch_index_file, len(image_paths) // batch_size)
-
 
     with open(pickle_file, "wb") as f:
         pickle.dump(histogram_dict, f)

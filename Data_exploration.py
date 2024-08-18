@@ -8,7 +8,7 @@ from PIL import Image
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
 # Step 1: Load the embeddings with IDs and image paths
-with open('pkl_files/embeddings_with_ids.pkl', 'rb') as f:
+with open("pkl_files/embeddings_with_ids.pkl", "rb") as f:
     embeddings_with_ids = pickle.load(f)
 
 # Extract the embeddings and image paths
@@ -52,26 +52,41 @@ for i in range(n_clusters):
 # Step 6: Plot the clustered embeddings
 plt.figure(figsize=(16, 12))
 for i in range(n_clusters):
-    plt.scatter(reduced_embeddings[clusters == i, 0], reduced_embeddings[clusters == i, 1], label=f"Cluster {i}")
+    plt.scatter(
+        reduced_embeddings[clusters == i, 0],
+        reduced_embeddings[clusters == i, 1],
+        label=f"Cluster {i}",
+    )
 
 # Plot the centroids
-plt.scatter(centroids[:, 0], centroids[:, 1], s=300, c='red', marker='X', label='Centroids')
+plt.scatter(
+    centroids[:, 0], centroids[:, 1], s=300, c="red", marker="X", label="Centroids"
+)
 
 # Add images corresponding to the centroids
 for i, index in enumerate(closest_images):
     img_path = image_paths[index]
     image = Image.open(img_path)
-    
+
     # Resize the image to a smaller size if necessary
     max_size = 128  # Maximum size for either dimension of the image
     image.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
-    
+
     # Increase the zoom level to make the images larger
     imagebox = OffsetImage(image, zoom=0.3)
-    ab = AnnotationBbox(imagebox, (centroids[i, 0], centroids[i, 1]),
-                        frameon=False, pad=0.5)
+    ab = AnnotationBbox(
+        imagebox, (centroids[i, 0], centroids[i, 1]), frameon=False, pad=0.5
+    )
     plt.gca().add_artist(ab)
-    plt.text(centroids[i, 0], centroids[i, 1], f'Centroid {i}', fontsize=9, weight='bold', ha='center', va='center')
+    plt.text(
+        centroids[i, 0],
+        centroids[i, 1],
+        f"Centroid {i}",
+        fontsize=9,
+        weight="bold",
+        ha="center",
+        va="center",
+    )
 
 plt.xlabel("PCA Component 1")
 plt.ylabel("PCA Component 2")
