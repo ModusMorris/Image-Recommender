@@ -38,6 +38,10 @@ The **'dimension_reduction_similarity.py'** file implements a technique for dime
 ### 4. Visualization of Results
 Both modules (**'color_profiling.py'** and **'dimension_reduction_similarity.py'**) include functions to visualize the results. Found similar images can be displayed in a grid format, allowing for an intuitive visual assessment of similarity.
 
+
+## Tensorboard demo
+![Tensorboard_example](https://github.com/user-attachments/assets/00b30b03-9acd-479f-b91b-44b5a9e75ee7)
+
 ## Directory Structure
 - **embedding_recommender.py:** Implements the image recommendation system based on embeddings generated using a pre-trained ResNet50 model.
 - **color_profiling.py:** Analyzes color histograms of images and finds similar images based on their color profiles.
@@ -92,3 +96,6 @@ If you want to display the datavisualizations you will have to edit the paths to
 - matplotlib
 - numba
 - tqdm
+
+
+
