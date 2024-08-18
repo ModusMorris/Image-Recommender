@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 # Load the embeddings with unique IDs and image paths
 start_time = time.time()
-with open("corrected_embeddings_with_ids.pkl", "rb") as f:
+with open("pkl_files/embeddings_with_ids.pkl", "rb") as f:
     embeddings_with_ids = pickle.load(f)
 load_time = time.time() - start_time
 print(f"Time to load embeddings: {load_time:.2f} seconds")
@@ -73,11 +73,6 @@ example_images = [
     for f in os.listdir(example_folder)
     if f.endswith(("png", "jpg", "jpeg"))
 ]
-
-
-# Load the input image
-input_image_path = "input_images/bird.jpg"  # Adjust the path as needed
-print(f"Input image path: {input_image_path}")
 
 num_images = len(example_images)
 fig, axes = plt.subplots(

@@ -60,6 +60,29 @@ Use **'color_profiling.py'** to analyze the color histograms of images. This met
 ### **3. Dimensionality Reduction and Similarity Calculation:**
 Utilize **'dimension_reduction_similarity.py'** to reduce the dimensionality of color histograms and find similar images based on the cosine similarity of the reduced data.
 
+### **4. Directory Paths for usage:**
+If you want to create the database and the .pkl files you will have to edit the paths in the coresponding files
+**generator.py**
+Line 135 edit **directory** parameter to your image dataset
+
+**extract_embeddings.py**
+Line 134 edit **root_dir** parameter to your image dataset
+
+**embedding_recommender.py**
+Line 14 set the path to the pkl file with the embeddings
+Line 70 edit **example_folder** parameter to the input image folder. Maximum 5 images!
+
+**dimension_reduction_similarity.py**
+Line 72 edit **input_folder** parameter to the input image folder.
+Line 73 set **pickle_file** parameter to the path of the histograms.pkl
+
+**color_profiling.py**
+Line 91 edit **input_folder** parameter to the input image folder.
+Line 92 set **pickle_file** parameter to the path of the histograms.pkl
+
+**Warning**
+If you want to display the datavisualizations you will have to edit the paths to the pkl files
+
 ## Dependencies
 - Python 3.x
 - torch
