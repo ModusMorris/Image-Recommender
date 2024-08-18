@@ -16,3 +16,4 @@ recommender
 /examples/
 /tutorial_logs/
 *__pycache__
+/lib/
