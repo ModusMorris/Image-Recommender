@@ -10,30 +10,41 @@ from multiprocessing import Pool, cpu_count
 from sklearn.decomposition import PCA
 from sklearn.metrics.pairwise import cosine_similarity
 
+# Global Cache für bereits berechnete Histogramme
+histogram_cache = {}
+pca_cache = None  # Cache für PCA-Ergebnisse
 
 def extract_histogram(image_path):
+    if image_path in histogram_cache:
+        return histogram_cache[image_path]
+
     with Image.open(image_path) as img:
         img = img.convert("RGB")
         img = img.resize((224, 224))
         histogram = np.array(img.histogram()).reshape((3, 256)).astype(float)
         histogram /= histogram.sum()
-        return histogram.flatten()
+        histogram_cache[image_path] = histogram.flatten()
 
+    return histogram_cache[image_path]
 
 def load_histograms(pickle_file):
     with open(pickle_file, "rb") as f:
         histograms = pickle.load(f)
     return histograms
 
-
 def pca_cosine_similarity(input_histogram, histograms, pca, top_n=5):
-    hist_values = np.array(list(histograms.values()))
-    pca_histograms = pca.transform(hist_values)
+    global pca_cache
+    if pca_cache is None:
+        hist_values = np.array(list(histograms.values()))
+        pca_histograms = pca.transform(hist_values)
+        pca_cache = pca_histograms
+    else:
+        pca_histograms = pca_cache
+
     pca_input_histogram = pca.transform([input_histogram])
     similarities = cosine_similarity(pca_input_histogram, pca_histograms)[0]
     top_indices = np.argsort(similarities)[-top_n:][::-1]
     return [(list(histograms.keys())[i], similarities[i]) for i in top_indices]
-
 
 def display_images(image_groups, titles):
     num_images = len(image_groups[0])
@@ -56,7 +67,6 @@ def display_images(image_groups, titles):
     plt.tight_layout()
     plt.show()
 
-
 def get_image_path_from_db(image_id, conn):
     cursor = conn.cursor()
     cursor.execute("SELECT file_path FROM images WHERE id=?", (image_id,))
@@ -64,7 +74,6 @@ def get_image_path_from_db(image_id, conn):
     if result:
         return result[0]
     return None
-
 
 def main():
     start_time = time.time()
@@ -93,7 +102,7 @@ def main():
 
     # Timing: Extract histograms
     extract_hist_start = time.time()
-    with Pool(cpu_count()) as pool:
+    with Pool(min(cpu_count(), len(input_image_paths))) as pool:
         input_histograms = list(
             tqdm(
                 pool.imap(extract_histogram, input_image_paths),
