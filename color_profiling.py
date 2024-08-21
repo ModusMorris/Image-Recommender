@@ -8,50 +8,56 @@ import time
 from multiprocessing import Pool, cpu_count
 from numba import njit
 
+# Global Cache für bereits berechnete Histogramme
+histogram_cache = {}
 
 @njit
 def chi2_distance(histA, histB, eps=1e-10):
     return 0.5 * np.sum(((histA - histB) ** 2) / (histA + histB + eps))
 
-
 def extract_histogram(image_path):
+    if image_path in histogram_cache:
+        return histogram_cache[image_path]
+
     with Image.open(image_path) as img:
         img = img.convert("RGB")
         img = img.resize((224, 224))
         histogram = np.array(img.histogram()).reshape((3, 256)).astype(float)
         histogram /= histogram.sum()
-        return histogram.flatten()
+        histogram_cache[image_path] = histogram.flatten()
 
+    return histogram_cache[image_path]
 
 def load_histograms(pickle_file):
     with open(pickle_file, "rb") as f:
         histograms = pickle.load(f)
     return histograms
 
-
 def find_similar_images_for_one_input(input_histogram, histograms, top_n=5):
     hist_list = np.array(list(histograms.values()))
-    distances = np.array([chi2_distance(input_histogram, hist) for hist in hist_list])
+    distances = np.empty(hist_list.shape[0])
+    
+    for i in range(hist_list.shape[0]):
+        distances[i] = chi2_distance(input_histogram, hist_list[i])
+        
     sorted_indices = np.argsort(distances)[:top_n]
-    return [list(histograms.keys())[i] for i in sorted_indices], distances[
-        sorted_indices
-    ]
-
+    return [list(histograms.keys())[i] for i in sorted_indices], distances[sorted_indices]
 
 def find_aggregated_similar_images(input_histograms, histograms, top_n=5):
     hist_list = np.array(list(histograms.values()))
     aggregated_distances = np.zeros(hist_list.shape[0])
 
     for input_hist in input_histograms:
-        distances = np.array([chi2_distance(input_hist, hist) for hist in hist_list])
+        distances = np.empty(hist_list.shape[0])
+        
+        for i in range(hist_list.shape[0]):
+            distances[i] = chi2_distance(input_hist, hist_list[i])
+            
         aggregated_distances += distances
 
-    aggregated_distances /= len(input_histograms)  # Calculate mean distance
+    aggregated_distances /= len(input_histograms)
     sorted_indices = np.argsort(aggregated_distances)[:top_n]
-    return [list(histograms.keys())[i] for i in sorted_indices], aggregated_distances[
-        sorted_indices
-    ]
-
+    return [list(histograms.keys())[i] for i in sorted_indices], aggregated_distances[sorted_indices]
 
 def display_images(image_groups, titles):
     num_images = len(image_groups[0])
@@ -74,7 +80,6 @@ def display_images(image_groups, titles):
     plt.tight_layout()
     plt.show()
 
-
 def get_image_paths_from_db(image_ids, conn):
     cursor = conn.cursor()
     query = "SELECT id, file_path FROM images WHERE id IN ({seq})".format(
@@ -83,7 +88,6 @@ def get_image_paths_from_db(image_ids, conn):
     cursor.execute(query, image_ids)
     result = cursor.fetchall()
     return {row[0]: row[1] for row in result}
-
 
 def main():
     start_time = time.time()
@@ -111,7 +115,7 @@ def main():
     all_titles = []
 
     extract_hist_start = time.time()
-    with Pool(cpu_count()) as pool:
+    with Pool(min(cpu_count(), len(input_image_paths))) as pool:
         input_histograms = pool.map(extract_histogram, input_image_paths)
     extract_hist_end = time.time()
     print(
@@ -119,7 +123,6 @@ def main():
     )
 
     find_sim_start = time.time()
-    # Find individually similar images
     for input_image_path, input_histogram in zip(input_image_paths, input_histograms):
         similar_images, distances = find_similar_images_for_one_input(
             input_histogram, histograms
@@ -143,7 +146,6 @@ def main():
     )
 
     agg_sim_start = time.time()
-    # Find aggregated similar images
     aggregated_similar_images, aggregated_distances = find_aggregated_similar_images(
         input_histograms, histograms
     )
