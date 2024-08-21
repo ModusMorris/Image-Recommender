@@ -83,9 +83,9 @@ def load_uuids_from_embeddings(embeddings_path):
 
 # Example usage
 if __name__ == "__main__":
-    db_path = "image_metadata.db"
-    embeddings_path = "combined_embeddings.pkl"
-    output_file = "classifications_inception.pkl"
+    db_path = "images.db"
+    embeddings_path = "corrected_embeddings_with_id.pkl"
+    output_file = "classifications_with_names.pkl"
     
     # Load UUIDs from the embeddings file
     uuids = load_uuids_from_embeddings(embeddings_path)
