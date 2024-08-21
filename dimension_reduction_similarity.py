@@ -6,9 +6,10 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import time
-from multiprocessing import Pool, cpu_count
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from sklearn.decomposition import PCA
 from sklearn.metrics.pairwise import cosine_similarity
+from multiprocessing import cpu_count
 
 # Global Cache für bereits berechnete Histogramme
 histogram_cache = {}
@@ -20,8 +21,8 @@ def extract_histogram(image_path):
 
     with Image.open(image_path) as img:
         img = img.convert("RGB")
-        img = img.resize((224, 224))
-        histogram = np.array(img.histogram()).reshape((3, 256)).astype(float)
+        img = img.resize((128, 128))  # Reduzierte Bildgröße für schnellere Verarbeitung
+        histogram = np.array(img.histogram(), dtype=np.float32).reshape((3, 256))
         histogram /= histogram.sum()
         histogram_cache[image_path] = histogram.flatten()
 
@@ -30,12 +31,15 @@ def extract_histogram(image_path):
 def load_histograms(pickle_file):
     with open(pickle_file, "rb") as f:
         histograms = pickle.load(f)
+    # Konvertiere alle Histogramme zu float32 für geringeren Speicherverbrauch
+    for k, v in histograms.items():
+        histograms[k] = np.array(v, dtype=np.float32)
     return histograms
 
 def pca_cosine_similarity(input_histogram, histograms, pca, top_n=5):
     global pca_cache
     if pca_cache is None:
-        hist_values = np.array(list(histograms.values()))
+        hist_values = np.array(list(histograms.values()), dtype=np.float32)
         pca_histograms = pca.transform(hist_values)
         pca_cache = pca_histograms
     else:
@@ -102,10 +106,10 @@ def main():
 
     # Timing: Extract histograms
     extract_hist_start = time.time()
-    with Pool(min(cpu_count(), len(input_image_paths))) as pool:
+    with ProcessPoolExecutor(max_workers=min(cpu_count(), len(input_image_paths))) as executor:
         input_histograms = list(
             tqdm(
-                pool.imap(extract_histogram, input_image_paths),
+                executor.map(extract_histogram, input_image_paths),
                 total=len(input_image_paths),
                 desc="Extracting histograms",
             )
@@ -120,7 +124,7 @@ def main():
 
     # Timing: PCA fitting
     pca_start = time.time()
-    hist_values = np.array(list(histograms.values()))
+    hist_values = np.array(list(histograms.values()), dtype=np.float32)
     pca = PCA(n_components=170)
     pca.fit(hist_values)
     pca_end = time.time()
@@ -128,11 +132,15 @@ def main():
 
     # Timing: Find similar images
     find_sim_start = time.time()
-    for input_image_path, input_histogram in zip(input_image_paths, input_histograms):
-        similar_images = pca_cosine_similarity(input_histogram, histograms, pca)
-        similar_image_paths = [
-            (input_image_path, 1.0)
-        ]  # Add the input image itself with 100% similarity
+    with ThreadPoolExecutor(max_workers=min(cpu_count(), len(input_image_paths))) as executor:
+        similar_images_results = list(
+            executor.map(
+                lambda hist: pca_cosine_similarity(hist, histograms, pca),
+                input_histograms
+            )
+        )
+    for input_image_path, similar_images in zip(input_image_paths, similar_images_results):
+        similar_image_paths = [(input_image_path, 1.0)]
         titles = ["Input Image"]
         for img_id, similarity in similar_images:
             similar_image_path = get_image_path_from_db(img_id, conn)

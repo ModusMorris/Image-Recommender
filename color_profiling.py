@@ -5,15 +5,22 @@ from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-from multiprocessing import Pool, cpu_count
-from numba import njit
+from concurrent.futures import ThreadPoolExecutor
+from numba import njit, prange
+from multiprocessing import cpu_count
+import mmap
 
 # Global Cache für bereits berechnete Histogramme
 histogram_cache = {}
 
-@njit
-def chi2_distance(histA, histB, eps=1e-10):
-    return 0.5 * np.sum(((histA - histB) ** 2) / (histA + histB + eps))
+@njit(parallel=True)
+def chi2_distance_vectorized(input_histogram, hist_list, eps=1e-10):
+    distances = np.zeros(hist_list.shape[0], dtype=np.float32)
+    for i in prange(hist_list.shape[0]):
+        diff = input_histogram - hist_list[i]
+        sum_hist = input_histogram + hist_list[i] + eps
+        distances[i] = 0.5 * np.sum((diff ** 2) / sum_hist)
+    return distances
 
 def extract_histogram(image_path):
     if image_path in histogram_cache:
@@ -22,7 +29,7 @@ def extract_histogram(image_path):
     with Image.open(image_path) as img:
         img = img.convert("RGB")
         img = img.resize((128, 128))  # Reduzierte Bildgröße für schnellere Verarbeitung
-        histogram = np.array(img.histogram()).reshape((3, 256)).astype(float)
+        histogram = np.array(img.histogram(), dtype=np.float32).reshape((3, 256))
         histogram /= histogram.sum()
         histogram_cache[image_path] = histogram.flatten()
 
@@ -31,28 +38,23 @@ def extract_histogram(image_path):
 def load_histograms(pickle_file):
     with open(pickle_file, "rb") as f:
         histograms = pickle.load(f)
+    # Konvertiere alle Histogramme zu float32 für geringeren Speicherverbrauch
+    for k, v in histograms.items():
+        histograms[k] = np.array(v, dtype=np.float32)
     return histograms
 
 def find_similar_images_for_one_input(input_histogram, histograms, top_n=5):
-    hist_list = np.array(list(histograms.values()))
-    distances = np.empty(hist_list.shape[0])
-    
-    for i in range(hist_list.shape[0]):
-        distances[i] = chi2_distance(input_histogram, hist_list[i])
-        
+    hist_list = np.array(list(histograms.values()), dtype=np.float32)
+    distances = chi2_distance_vectorized(input_histogram, hist_list)
     sorted_indices = np.argsort(distances)[:top_n]
     return [list(histograms.keys())[i] for i in sorted_indices], distances[sorted_indices]
 
 def find_aggregated_similar_images(input_histograms, histograms, top_n=5):
-    hist_list = np.array(list(histograms.values()))
-    aggregated_distances = np.zeros(hist_list.shape[0])
+    hist_list = np.array(list(histograms.values()), dtype=np.float32)
+    aggregated_distances = np.zeros(hist_list.shape[0], dtype=np.float32)
 
     for input_hist in input_histograms:
-        distances = np.empty(hist_list.shape[0])
-        
-        for i in range(hist_list.shape[0]):
-            distances[i] = chi2_distance(input_hist, hist_list[i])
-            
+        distances = chi2_distance_vectorized(input_hist, hist_list)
         aggregated_distances += distances
 
     aggregated_distances /= len(input_histograms)
@@ -115,8 +117,8 @@ def main():
     all_titles = []
 
     extract_hist_start = time.time()
-    with Pool(processes=max(1, cpu_count() - 1)) as pool:  # Weniger aggressive Parallelisierung
-        input_histograms = pool.map(extract_histogram, input_image_paths)
+    with ThreadPoolExecutor(max_workers=cpu_count()) as executor:
+        input_histograms = list(executor.map(extract_histogram, input_image_paths))
     extract_hist_end = time.time()
     print(
         f"Time to extract histograms: {extract_hist_end - extract_hist_start:.2f} seconds"
