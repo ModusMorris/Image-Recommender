@@ -21,7 +21,7 @@ def extract_histogram(image_path):
 
     with Image.open(image_path) as img:
         img = img.convert("RGB")
-        img = img.resize((224, 224))
+        img = img.resize((128, 128))  # Reduzierte Bildgröße für schnellere Verarbeitung
         histogram = np.array(img.histogram()).reshape((3, 256)).astype(float)
         histogram /= histogram.sum()
         histogram_cache[image_path] = histogram.flatten()
@@ -115,7 +115,7 @@ def main():
     all_titles = []
 
     extract_hist_start = time.time()
-    with Pool(min(cpu_count(), len(input_image_paths))) as pool:
+    with Pool(processes=max(1, cpu_count() - 1)) as pool:  # Weniger aggressive Parallelisierung
         input_histograms = pool.map(extract_histogram, input_image_paths)
     extract_hist_end = time.time()
     print(
