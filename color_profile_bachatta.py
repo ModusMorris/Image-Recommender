@@ -8,18 +8,15 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from numba import njit, prange
 from multiprocessing import cpu_count
-import mmap
 
 # Global Cache für bereits berechnete Histogramme
 histogram_cache = {}
 
 @njit(parallel=True)
-def chi2_distance_vectorized(input_histogram, hist_list, eps=1e-10):
+def bhattacharyya_distance_vectorized(input_histogram, hist_list):
     distances = np.zeros(hist_list.shape[0], dtype=np.float32)
     for i in prange(hist_list.shape[0]):
-        diff = input_histogram - hist_list[i]
-        sum_hist = input_histogram + hist_list[i] + eps
-        distances[i] = 0.5 * np.sum((diff ** 2) / sum_hist)
+        distances[i] = -np.log(np.sum(np.sqrt(input_histogram * hist_list[i])))
     return distances
 
 def extract_histogram(image_path):
@@ -45,7 +42,7 @@ def load_histograms(pickle_file):
 
 def find_similar_images_for_one_input(input_histogram, histograms, top_n=5):
     hist_list = np.array(list(histograms.values()), dtype=np.float32)
-    distances = chi2_distance_vectorized(input_histogram, hist_list)
+    distances = bhattacharyya_distance_vectorized(input_histogram, hist_list)
     sorted_indices = np.argsort(distances)[:top_n]
     return [list(histograms.keys())[i] for i in sorted_indices], distances[sorted_indices]
 
@@ -54,7 +51,7 @@ def find_aggregated_similar_images(input_histograms, histograms, top_n=5):
     aggregated_distances = np.zeros(hist_list.shape[0], dtype=np.float32)
 
     for input_hist in input_histograms:
-        distances = chi2_distance_vectorized(input_hist, hist_list)
+        distances = bhattacharyya_distance_vectorized(input_hist, hist_list)
         aggregated_distances += distances
 
     aggregated_distances /= len(input_histograms)
@@ -136,7 +133,7 @@ def main():
         for img_id, distance in zip(similar_images, distances):
             if img_id in image_paths:
                 similar_image_paths.append(image_paths[img_id])
-                titles.append(f"Similarity: {distance*100:.2f}%")
+                titles.append(f"Similarity: {distance:.4f}")
             else:
                 print(f"Image path not found in database for ID {img_id}")
 
@@ -158,7 +155,7 @@ def main():
     for img_id, distance in zip(aggregated_similar_images, aggregated_distances):
         if img_id in image_paths:
             aggregated_similar_image_paths.append(image_paths[img_id])
-            aggregated_titles.append(f"Mean Sim: {distance*100:.2f}%")
+            aggregated_titles.append(f"Mean Sim: {distance:.4f}")
         else:
             print(f"Image path not found in database for ID {img_id}")
 
@@ -171,14 +168,14 @@ def main():
 
     conn.close()
 
-    end_time = time.time()
-    duration = end_time - start_time
-    print(f"The computation and display of images took {duration:.2f} seconds.")
-
     plot_start = time.time()
     display_images(all_similar_image_groups, all_titles)
     plot_end = time.time()
     print(f"Time to display images: {plot_end - plot_start:.2f} seconds")
+
+    end_time = time.time()
+    duration = end_time - start_time
+    print(f"The computation and display of images took {duration:.2f} seconds.")
 
 
 if __name__ == "__main__":

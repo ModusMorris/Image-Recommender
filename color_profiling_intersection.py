@@ -8,23 +8,20 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from numba import njit, prange
 from multiprocessing import cpu_count
-import mmap
 
 # Global Cache für bereits berechnete Histogramme
 histogram_cache = {}
 
 @njit(parallel=True)
-def chi2_distance_vectorized(input_histogram, hist_list, eps=1e-10):
-    distances = np.zeros(hist_list.shape[0], dtype=np.float32)
+def intersection_similarity_vectorized(input_histogram, hist_list):
+    similarities = np.zeros(hist_list.shape[0], dtype=np.float32)
     for i in prange(hist_list.shape[0]):
-        diff = input_histogram - hist_list[i]
-        sum_hist = input_histogram + hist_list[i] + eps
-        distances[i] = 0.5 * np.sum((diff ** 2) / sum_hist)
-    return distances
+        similarities[i] = np.sum(np.minimum(input_histogram, hist_list[i]))
+    return similarities
 
 def extract_histogram(image_path):
-    if image_path in histogram_cache:
-        return histogram_cache[image_path]
+    if (cached_hist := histogram_cache.get(image_path)) is not None:
+        return cached_hist
 
     with Image.open(image_path) as img:
         img = img.convert("RGB")
@@ -45,21 +42,21 @@ def load_histograms(pickle_file):
 
 def find_similar_images_for_one_input(input_histogram, histograms, top_n=5):
     hist_list = np.array(list(histograms.values()), dtype=np.float32)
-    distances = chi2_distance_vectorized(input_histogram, hist_list)
-    sorted_indices = np.argsort(distances)[:top_n]
-    return [list(histograms.keys())[i] for i in sorted_indices], distances[sorted_indices]
+    similarities = intersection_similarity_vectorized(input_histogram, hist_list)
+    sorted_indices = np.argsort(-similarities)[:top_n]  # Sort in descending order
+    return [list(histograms.keys())[i] for i in sorted_indices], similarities[sorted_indices]
 
 def find_aggregated_similar_images(input_histograms, histograms, top_n=5):
     hist_list = np.array(list(histograms.values()), dtype=np.float32)
-    aggregated_distances = np.zeros(hist_list.shape[0], dtype=np.float32)
+    aggregated_similarities = np.zeros(hist_list.shape[0], dtype=np.float32)
 
     for input_hist in input_histograms:
-        distances = chi2_distance_vectorized(input_hist, hist_list)
-        aggregated_distances += distances
+        similarities = intersection_similarity_vectorized(input_hist, hist_list)
+        aggregated_similarities += similarities
 
-    aggregated_distances /= len(input_histograms)
-    sorted_indices = np.argsort(aggregated_distances)[:top_n]
-    return [list(histograms.keys())[i] for i in sorted_indices], aggregated_distances[sorted_indices]
+    aggregated_similarities /= len(input_histograms)
+    sorted_indices = np.argsort(-aggregated_similarities)[:top_n]  # Sort in descending order
+    return [list(histograms.keys())[i] for i in sorted_indices], aggregated_similarities[sorted_indices]
 
 def display_images(image_groups, titles):
     num_images = len(image_groups[0])
@@ -126,17 +123,17 @@ def main():
 
     find_sim_start = time.time()
     for input_image_path, input_histogram in zip(input_image_paths, input_histograms):
-        similar_images, distances = find_similar_images_for_one_input(
+        similar_images, similarities = find_similar_images_for_one_input(
             input_histogram, histograms
         )
         similar_image_paths = [input_image_path]
         titles = ["Input Image"]
         image_paths = get_image_paths_from_db(similar_images, conn)
 
-        for img_id, distance in zip(similar_images, distances):
+        for img_id, similarity in zip(similar_images, similarities):
             if img_id in image_paths:
                 similar_image_paths.append(image_paths[img_id])
-                titles.append(f"Similarity: {distance*100:.2f}%")
+                titles.append(f"Similarity: {similarity*100:.2f}%")
             else:
                 print(f"Image path not found in database for ID {img_id}")
 
@@ -148,17 +145,17 @@ def main():
     )
 
     agg_sim_start = time.time()
-    aggregated_similar_images, aggregated_distances = find_aggregated_similar_images(
+    aggregated_similar_images, aggregated_similarities = find_aggregated_similar_images(
         input_histograms, histograms
     )
     aggregated_similar_image_paths = []
     aggregated_titles = []
     image_paths = get_image_paths_from_db(aggregated_similar_images, conn)
 
-    for img_id, distance in zip(aggregated_similar_images, aggregated_distances):
+    for img_id, similarity in zip(aggregated_similar_images, aggregated_similarities):
         if img_id in image_paths:
             aggregated_similar_image_paths.append(image_paths[img_id])
-            aggregated_titles.append(f"Mean Sim: {distance*100:.2f}%")
+            aggregated_titles.append(f"Mean Sim: {similarity*100:.2f}%")
         else:
             print(f"Image path not found in database for ID {img_id}")
 
@@ -179,6 +176,8 @@ def main():
     display_images(all_similar_image_groups, all_titles)
     plot_end = time.time()
     print(f"Time to display images: {plot_end - plot_start:.2f} seconds")
+
+
 
 
 if __name__ == "__main__":
