@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 # Load the embeddings with unique IDs and image paths
 start_time = time.time()
-with open("pkl_files/embeddings_with_ids.pkl", "rb") as f:
+with open("corrected_embeddings_with_ids.pkl", "rb") as f:
     embeddings_with_ids = pickle.load(f)
 load_time = time.time() - start_time
 print(f"Time to load embeddings: {load_time:.2f} seconds")

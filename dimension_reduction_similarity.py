@@ -6,49 +6,40 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import time
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 from sklearn.decomposition import PCA
 from sklearn.metrics.pairwise import cosine_similarity
 from multiprocessing import cpu_count
 
 # Global Cache für bereits berechnete Histogramme
 histogram_cache = {}
-pca_cache = None  # Cache für PCA-Ergebnisse
 
 def extract_histogram(image_path):
-    if image_path in histogram_cache:
-        return histogram_cache[image_path]
-
     with Image.open(image_path) as img:
         img = img.convert("RGB")
         img = img.resize((128, 128))  # Reduzierte Bildgröße für schnellere Verarbeitung
         histogram = np.array(img.histogram(), dtype=np.float32).reshape((3, 256))
         histogram /= histogram.sum()
-        histogram_cache[image_path] = histogram.flatten()
-
-    return histogram_cache[image_path]
+    return histogram.flatten()
 
 def load_histograms(pickle_file):
     with open(pickle_file, "rb") as f:
         histograms = pickle.load(f)
-    # Konvertiere alle Histogramme zu float32 für geringeren Speicherverbrauch
     for k, v in histograms.items():
         histograms[k] = np.array(v, dtype=np.float32)
     return histograms
 
 def pca_cosine_similarity(input_histogram, histograms, pca, top_n=5):
-    global pca_cache
-    if pca_cache is None:
-        hist_values = np.array(list(histograms.values()), dtype=np.float32)
-        pca_histograms = pca.transform(hist_values)
-        pca_cache = pca_histograms
-    else:
-        pca_histograms = pca_cache
-
+    hist_values = np.array(list(histograms.values()), dtype=np.float32)
+    pca_histograms = pca.transform(hist_values)
     pca_input_histogram = pca.transform([input_histogram])
     similarities = cosine_similarity(pca_input_histogram, pca_histograms)[0]
     top_indices = np.argsort(similarities)[-top_n:][::-1]
     return [(list(histograms.keys())[i], similarities[i]) for i in top_indices]
+
+def process_image(image_path):
+    histogram = extract_histogram(image_path)
+    return (image_path, histogram)
 
 def display_images(image_groups, titles):
     num_images = len(image_groups[0])
@@ -104,25 +95,17 @@ def main():
     all_similar_image_groups = []
     all_titles = []
 
-    # Timing: Extract histograms
-    extract_hist_start = time.time()
-    with ProcessPoolExecutor(max_workers=min(cpu_count(), len(input_image_paths))) as executor:
-        input_histograms = list(
+    # Timing: Extract histograms and find similar images on-the-fly
+    find_sim_start = time.time()
+    with ProcessPoolExecutor(max_workers=cpu_count()) as executor:
+        similar_images_results = list(
             tqdm(
-                executor.map(extract_histogram, input_image_paths),
+                executor.map(process_image, input_image_paths),
                 total=len(input_image_paths),
-                desc="Extracting histograms",
+                desc="Processing images"
             )
         )
-    extract_hist_end = time.time()
-    print(
-        f"Time to extract histograms: {extract_hist_end - extract_hist_start:.2f} seconds"
-    )
 
-    # Calculate average histogram
-    average_histogram = np.mean(input_histograms, axis=0)
-
-    # Timing: PCA fitting
     pca_start = time.time()
     hist_values = np.array(list(histograms.values()), dtype=np.float32)
     pca = PCA(n_components=170)
@@ -130,21 +113,14 @@ def main():
     pca_end = time.time()
     print(f"Time to fit PCA: {pca_end - pca_start:.2f} seconds")
 
-    # Timing: Find similar images
-    find_sim_start = time.time()
-    with ThreadPoolExecutor(max_workers=min(cpu_count(), len(input_image_paths))) as executor:
-        similar_images_results = list(
-            executor.map(
-                lambda hist: pca_cosine_similarity(hist, histograms, pca),
-                input_histograms
-            )
-        )
-    for input_image_path, similar_images in zip(input_image_paths, similar_images_results):
+    for input_image_path, input_histogram in similar_images_results:
+        similar_images = pca_cosine_similarity(input_histogram, histograms, pca)
         similar_image_paths = [(input_image_path, 1.0)]
         titles = ["Input Image"]
         for img_id, similarity in similar_images:
             similar_image_path = get_image_path_from_db(img_id, conn)
             if similar_image_path is not None:
+                similar_image_path = os.path.abspath(similar_image_path)
                 similar_image_paths.append((similar_image_path, similarity))
                 titles.append(f"Similarity: {similarity*100:.2f}%")
             else:
@@ -153,18 +129,18 @@ def main():
         all_similar_image_groups.append(similar_image_paths)
         all_titles.append(titles)
     find_sim_end = time.time()
-    print(
-        f"Time to find all similar images: {find_sim_end - find_sim_start:.2f} seconds"
-    )
+    print(f"Time to find all similar images: {find_sim_end - find_sim_start:.2f} seconds")
 
     # Timing: Find aggregated similar images
     agg_sim_start = time.time()
+    average_histogram = np.mean([res[1] for res in similar_images_results], axis=0)
     overall_similar_images = pca_cosine_similarity(average_histogram, histograms, pca)
     overall_similar_image_paths = []
     overall_titles = []
     for img_id, similarity in overall_similar_images:
         similar_image_path = get_image_path_from_db(img_id, conn)
         if similar_image_path is not None:
+            similar_image_path = os.path.abspath(similar_image_path)
             overall_similar_image_paths.append((similar_image_path, similarity))
             overall_titles.append(f"Mean Sim: {similarity*100:.2f}%")
         else:
@@ -173,15 +149,12 @@ def main():
     all_similar_image_groups.append(overall_similar_image_paths)
     all_titles.append(overall_titles)
     agg_sim_end = time.time()
-    print(
-        f"Time to find aggregated similar images: {agg_sim_end - agg_sim_start:.2f} seconds"
-    )
+    print(f"Time to find aggregated similar images: {agg_sim_end - agg_sim_start:.2f} seconds")
 
     conn.close()
 
     # Timing: Display images
     plot_start = time.time()
-    # Extract paths from tuples for display
     all_similar_image_groups_paths = [
         [img_path for img_path, similarity in group]
         for group in all_similar_image_groups

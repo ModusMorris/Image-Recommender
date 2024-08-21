@@ -4,7 +4,7 @@ import pandas as pd
 import networkx as nx
 
 # Load the data from the pkl file
-with open("pkl_files/classifications_with_names.pkl", "rb") as file:
+with open("classifications_with_names.pkl", "rb") as file:
     data = pickle.load(file)
 
 # Extract class names from the dictionary

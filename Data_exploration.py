@@ -8,7 +8,7 @@ from PIL import Image
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
 # Step 1: Load the embeddings with IDs and image paths
-with open("pkl_files/embeddings_with_ids.pkl", "rb") as f:
+with open("embeddings_with_ids.pkl", "rb") as f:
     embeddings_with_ids = pickle.load(f)
 
 # Extract the embeddings and image paths
@@ -18,12 +18,12 @@ image_paths = [item[2] for item in embeddings_with_ids]
 print(f"Loaded {len(embeddings)} embeddings and their corresponding image paths.")
 
 # Step 2: Reduce dimensionality using PCA
-pca = PCA(n_components=2)
+pca = PCA(n_components=200)
 reduced_embeddings = pca.fit_transform(embeddings)
 print(f"Reduced embeddings shape: {reduced_embeddings.shape}")
 
 # Step 3: Apply K-means clustering
-n_clusters = 30  # Adjust the number of clusters as needed
+n_clusters = 50  # Adjust the number of clusters as needed
 kmeans = KMeans(n_clusters=n_clusters, random_state=42)
 clusters = kmeans.fit_predict(reduced_embeddings)
 print(f"Cluster labels: {clusters}")
